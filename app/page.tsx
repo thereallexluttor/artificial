@@ -1,25 +1,45 @@
 "use client";
 
 import { Button } from "@/components/ui/button"
-import { useEffect, useState, useMemo, memo } from "react"
+import { useEffect, useState, useMemo, memo, useCallback, lazy, Suspense } from "react"
 import Silk from './Silk';
 import ShapeBlur from './ShapeBlur';
-import SplineScene from './components/SplineScene';
+// Lazy load heavy components
+const SplineScene = lazy(() => import('./components/SplineScene'));
+const ChromaGrid = lazy(() => import("@/components/ui/chroma-grid/ChromaGrid").then(module => ({ default: module.ChromaGrid })));
 import ScrollVelocity from "./components/ScrollVelocity";
-import { ChromaGrid } from "@/components/ui/chroma-grid/ChromaGrid";
 import { Sparkles } from "lucide-react";
 import Beams from "./components/Beams";
+import OptimizedFonts from "./components/OptimizedFonts";
 import "@/components/ui/chroma-grid/ChromaGrid.css";
+
+// Throttle function for performance
+const throttle = (func: Function, delay: number) => {
+  let timeoutId: NodeJS.Timeout;
+  let lastExecTime = 0;
+  return function (...args: any[]) {
+    const currentTime = Date.now();
+    
+    if (currentTime - lastExecTime > delay) {
+      func(...args);
+      lastExecTime = currentTime;
+    } else {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        func(...args);
+        lastExecTime = Date.now();
+      }, delay - (currentTime - lastExecTime));
+    }
+  };
+};
 
 // Memoize the Beams component
 const MemoizedBeams = memo(Beams);
 
-// Memoize the SplineScene component
-const MemoizedSplineScene = memo(SplineScene);
-
+// Optimized static data with memoization
 const chromaItems = [
   {
-    image: "https://images.unsplash.com/photo-1507525428034-b723a9ce6890?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    image: "/gifs/branding.gif",
     title: "Branding Estratégico",
     subtitle: "Branding Estratégico con IA",
     handle: "@artificial",
@@ -28,7 +48,7 @@ const chromaItems = [
     url: "#"
   },
   {
-    image: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    image: "/gifs/uiux.gif",
     title: "UX/UI Diseño",
     subtitle: "UX/UI & Diseño de Producto",
     handle: "@artificial",
@@ -37,7 +57,7 @@ const chromaItems = [
     url: "#"
   },
   {
-    image: "https://images.unsplash.com/photo-1556740738-b6a63e2775df?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    image: "/gifs/software.gif",
     title: "Software a Medida",
     subtitle: "Software a Medida & Automatización",
     handle: "@artificial",
@@ -46,7 +66,7 @@ const chromaItems = [
     url: "#"
   },
   {
-    image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    image: "/gifs/inteligencia.gif",
     title: "Inteligencia de Datos",
     subtitle: "Inteligencia de Datos & Analítica Predictiva",
     handle: "@artificial",
@@ -55,7 +75,7 @@ const chromaItems = [
     url: "#"
   },
   {
-    image: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=2071&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    image: "/gifs/marketing.gif",
     title: "Growth Marketing",
     subtitle: "Growth & Performance Marketing",
     handle: "@artificial",
@@ -64,7 +84,7 @@ const chromaItems = [
     url: "#"
   },
   {
-    image: "https://images.unsplash.com/photo-1600880292210-f7615951a99a?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    image: "/gifs/consultaria.gif",
     title: "Consultoría Digital",
     subtitle: "Consultoría Digital & Roadmap de Innovación",
     handle: "@artificial",
@@ -74,30 +94,114 @@ const chromaItems = [
   },
 ];
 
+// Services data with stable reference
+const services = [
+  { text: "Fábricas pequeñas", className: "font-oswald" },
+  { text: "Talleres de producción", className: "font-playfair" },
+  { text: "Clínicas estéticas", className: "font-lato" },
+  { text: "Consultorios odontológicos", className: "font-montserrat" },
+  { text: "Spas", className: "font-roboto" },
+  { text: "Centros de uñas", className: "font-oswald" },
+  { text: "Centros de cejas", className: "font-playfair" },
+  { text: "Estudios jurídicos", className: "font-lato" },
+  { text: "Empresas de ingeniería", className: "font-montserrat" },
+  { text: "Peluquerías", className: "font-roboto" },
+  { text: "Barberías", className: "font-oswald" },
+  { text: "Clínicas veterinarias", className: "font-playfair" },
+  { text: "Tiendas de ropa", className: "font-lato" },
+  { text: "Tiendas de zapatos", className: "font-montserrat" },
+  { text: "Tiendas de muebles", className: "font-roboto" },
+  { text: "Licoreras", className: "font-oswald" },
+  { text: "Ópticas", className: "font-playfair" },
+  { text: "Tiendas de accesorios", className: "font-lato" },
+  { text: "Negocios e-commerce", className: "font-montserrat" },
+];
+
+// Navigation items with stable reference
+const navItems = [
+  { label: "Inicio", href: "#inicio" },
+  { label: "Servicios", href: "#servicios" },
+  { label: "Ventajas", href: "#ventajas" },
+  { label: "Nuestra historia", href: "#historia" },
+];
+
 // Create a memoized services section component
-const ServicesSection = memo(({ services1, services2, services3, services4, defaultCards }: any) => {
+const ServicesSection = memo(({ services1, services2, services3, services4 }: any) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isChromaActive, setIsChromaActive] = useState(false);
+  const [isBeamsActive, setIsBeamsActive] = useState(false);
+
+  // Optimized Beams with reduced complexity and GPU usage
   const memoizedBeams = useMemo(() => (
     <MemoizedBeams
-      beamWidth={2}
-      beamHeight={15}
-      beamNumber={12}
+      beamWidth={1.5}        // Reduced from 2
+      beamHeight={12}        // Reduced from 15
+      beamNumber={8}         // Reduced from 12
       lightColor="#ffffff"
-      speed={2}
-      noiseIntensity={1.75}
-      scale={0.2}
+      speed={1.5}            // Reduced from 2
+      noiseIntensity={1.2}   // Reduced from 1.75
+      scale={0.15}           // Reduced from 0.2
       rotation={30}
     />
   ), []);
 
-  // Combine services for the marquee effect
+  // Combine services for the marquee effect with stable references
   const firstHalf = useMemo(() => [...services1, ...services2], [services1, services2]);
   const secondHalf = useMemo(() => [...services3, ...services4], [services3, services4]);
 
+  // Optimized ChromaGrid props with reduced GPU load
+  const optimizedChromaProps = useMemo(() => ({
+    items: chromaItems,
+    radius: 200,           // Reduced from 220
+    damping: 0.5,          // Increased for smoother animation
+    fadeOut: 0.7,          // Increased from 0.6
+    ease: "power2.out"     // Less intensive than power3.out
+  }), []);
+
+  // Progressive loading with performance budgets
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          
+          // Stagger heavy component loading to prevent frame drops
+          const activateBeams = setTimeout(() => setIsBeamsActive(true), 100);
+          const activateChroma = setTimeout(() => setIsChromaActive(true), 300);
+          
+          observer.disconnect();
+          
+          return () => {
+            clearTimeout(activateBeams);
+            clearTimeout(activateChroma);
+          };
+        }
+      },
+      { 
+        threshold: 0.1,
+        rootMargin: '50px' // Start loading earlier
+      }
+    );
+
+    const section = document.getElementById('servicios');
+    if (section) {
+      observer.observe(section);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   return (
-    <section id="servicios" className="h-auto min-h-screen pt-16 pb-24 bg-black flex flex-col justify-center items-center text-white overflow-hidden relative">
-      {/* Beams Background */}
-      <div className="absolute inset-0 z-0">
-        {memoizedBeams}
+    <section 
+      id="servicios" 
+      className="h-auto min-h-screen pt-16 pb-24 bg-black flex flex-col justify-center items-center text-white overflow-hidden relative"
+      style={{ willChange: 'auto' }} // Optimize for GPU compositing
+    >
+      {/* Beams Background - Progressive Loading */}
+      <div className="absolute inset-0 z-0" style={{ willChange: isBeamsActive ? 'transform' : 'auto' }}>
+        {isBeamsActive && memoizedBeams}
       </div>
       
       {/* Content */}
@@ -113,29 +217,65 @@ const ServicesSection = memo(({ services1, services2, services3, services4, defa
           </p>
         </div>
 
-        {/* Services Cards */}
-        <div className="flex justify-center" style={{ height: '548px', width: '700px', position: 'relative', borderRadius: '20px', overflow: 'hidden' }}>
-          <ChromaGrid 
-            items={chromaItems}
-            radius={220}
-            damping={0.45}
-            fadeOut={0.6}
-            ease="power3.out"
-          />
+        {/* Services Cards with Progressive Loading */}
+        <div 
+          className="flex justify-center" 
+          style={{ 
+            height: '548px', 
+            width: '700px', 
+            position: 'relative', 
+            borderRadius: '20px', 
+            overflow: 'hidden',
+            willChange: isChromaActive ? 'transform' : 'auto' // GPU optimization hint
+          }}
+        >
+          {isVisible ? (
+            isChromaActive ? (
+              <Suspense fallback={<div className="w-full h-full bg-gray-900 rounded-[20px] flex items-center justify-center">
+                <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white"></div>
+              </div>}>
+                <ChromaGrid {...optimizedChromaProps} />
+              </Suspense>
+            ) : (
+              <div className="w-full h-full bg-gray-900 rounded-[20px] flex items-center justify-center">
+                <div className="animate-pulse rounded-full h-16 w-16 bg-gray-700"></div>
+                <span className="ml-4 text-gray-400">Cargando experiencias...</span>
+              </div>
+            )
+          ) : (
+            <div className="w-full h-full bg-gray-900 rounded-[20px] flex items-center justify-center">
+              <div className="animate-pulse rounded-full h-32 w-32 bg-gray-700"></div>
+            </div>
+          )}
         </div>
 
-        {/* Industries Marquee */}
-        <div className="w-full max-w-full text-center -mt-20">
-            <h3 className="text-2xl md:text-2xl font-bold text-white mb-2">Trabajamos con una amplia gama de industrias</h3>
-            <div className="relative h-64 [mask-image:linear-gradient(to_bottom,transparent,black_10%,black_90%,transparent)]">
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-full flex flex-col gap-y-6">
-                        <ScrollVelocity texts={firstHalf} velocity={-25} singleLine={true} className="text-2xl md:text-3xl text-gray-400 font-light opacity-80" />
-                        <ScrollVelocity texts={secondHalf} velocity={25} singleLine={true} className="text-2xl md:text-3xl text-gray-400 font-light opacity-80" />
-                    </div>
-                </div>
-            </div>
-        </div>
+        {/* Industries Marquee - Only load when visible */}
+        {isVisible && (
+          <div className="w-full max-w-full text-center -mt-20">
+              <h3 className="text-2xl md:text-2xl font-bold text-white mb-0">Trabajamos con una amplia gama de industrias</h3>
+              <div 
+                className="relative h-48 [mask-image:linear-gradient(to_bottom,transparent,black_10%,black_90%,transparent)]"
+                style={{ willChange: 'transform' }} // Optimize scroll animations
+              >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-full flex flex-col gap-y-6">
+                          <ScrollVelocity 
+                            texts={firstHalf} 
+                            velocity={-20} // Reduced from -25 for better performance
+                            singleLine={true} 
+                            className="text-2xl md:text-3xl text-gray-400 font-light opacity-80" 
+                          />
+                          <ScrollVelocity 
+                            texts={secondHalf} 
+                            velocity={20} // Reduced from 25 for better performance
+                            singleLine={true} 
+                            className="text-2xl md:text-3xl text-gray-400 font-light opacity-80" 
+                          />
+                      </div>
+                  </div>
+              </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -144,13 +284,17 @@ ServicesSection.displayName = 'ServicesSection';
 
 // Create a memoized hero section component
 const HeroSection = memo(() => {
+  const [showSpline, setShowSpline] = useState(false);
+
   const memoizedSilk = useMemo(() => (
     <Silk speed={5} scale={1} color="#7B7481" noiseIntensity={1.5} rotation={0} />
   ), []);
 
-  const memoizedSplineScene = useMemo(() => (
-    <MemoizedSplineScene />
-  ), []);
+  // Load Spline after initial render for better FCP
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSpline(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <section id="inicio" className="min-h-screen h-[100vh] relative overflow-hidden flex flex-col">
@@ -158,9 +302,15 @@ const HeroSection = memo(() => {
         {memoizedSilk}
       </div>
       
-      {/* Hero Graphic */}
+      {/* Hero Graphic with Lazy Loading */}
       <div className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }}>
-        {memoizedSplineScene}
+        {showSpline ? (
+          <Suspense fallback={<div className="w-full h-full bg-transparent" />}>
+            <SplineScene />
+          </Suspense>
+        ) : (
+          <div className="w-full h-full bg-transparent" />
+        )}
       </div>
 
       {/* Main Content */}
@@ -181,48 +331,52 @@ const HeroSection = memo(() => {
 });
 HeroSection.displayName = 'HeroSection';
 
-const navItems = [
-  { label: "Inicio", href: "#inicio" },
-  { label: "Servicios", href: "#servicios" },
-  { label: "Ventajas", href: "#ventajas" },
-  { label: "Nuestra historia", href: "#historia" },
-  //{ label: "Cuéntanos tu problema", href: "#" },
-];
-
 export default function LandingPage() {
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // Memoize services chunks to prevent recalculation
+  const servicesChunks = useMemo(() => {
+    const chunkSize = Math.ceil(services.length / 4);
+    return {
+      services1: services.slice(0, chunkSize),
+      services2: services.slice(chunkSize, chunkSize * 2),
+      services3: services.slice(chunkSize * 2, chunkSize * 3),
+      services4: services.slice(chunkSize * 3),
+    };
+  }, []);
+
+  // Optimized scroll handler with Intersection Observer
   useEffect(() => {
-    const handleScroll = () => {
-      // Get all sections
-      const sections = navItems.map(item => document.querySelector(item.href));
-      const validSections = sections.filter(section => section !== null) as Element[];
-
-      // Find which section is in view
-      const currentSection = validSections.findIndex(section => {
-        const rect = section.getBoundingClientRect();
-        return rect.top <= 100 && rect.bottom >= 100;
-      });
-
-      if (currentSection !== -1 && currentSection !== activeIndex) {
-        setActiveIndex(currentSection);
+    const sections = navItems.map(item => document.querySelector(item.href)).filter(Boolean) as Element[];
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = sections.findIndex(section => section === entry.target);
+            if (index !== -1 && index !== activeIndex) {
+              setActiveIndex(index);
+            }
+          }
+        });
+      },
+      { 
+        threshold: 0.5,
+        rootMargin: '-100px 0px -100px 0px'
       }
-    };
+    );
 
-    // Add scroll event listener
-    window.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initial check
+    sections.forEach(section => observer.observe(section));
 
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => observer.disconnect();
   }, [activeIndex]);
 
+  // Optimized header scroll effect with throttling
   useEffect(() => {
     const header = document.querySelector('header');
     if (!header) return;
 
-    const handleScroll = () => {
+    const handleScroll = throttle(() => {
         if (window.scrollY > 10) {
             header.classList.add('bg-black/20', 'backdrop-blur-sm');
             header.classList.remove('bg-transparent');
@@ -230,18 +384,18 @@ export default function LandingPage() {
             header.classList.remove('bg-black/20', 'backdrop-blur-sm');
             header.classList.add('bg-transparent');
         }
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-        window.removeEventListener('scroll', handleScroll);
-    };
+    }, 16); // ~60fps
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToSection = (href: string, index: number) => {
+  // Memoized scroll to section function
+  const scrollToSection = useCallback((href: string, index: number) => {
     const element = document.querySelector(href);
     if (element) {
       const headerHeight = document.querySelector('header')?.offsetHeight || 0;
-      const extraMargin = 50; // Adding 32px (2rem) of extra margin
+      const extraMargin = 50;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - headerHeight + extraMargin;
 
@@ -251,38 +405,11 @@ export default function LandingPage() {
       });
       setActiveIndex(index);
     }
-  };
-
-  const services = [
-    { text: "Fábricas pequeñas", className: "font-oswald" },
-    { text: "Talleres de producción", className: "font-playfair" },
-    { text: "Clínicas estéticas", className: "font-lato" },
-    { text: "Consultorios odontológicos", className: "font-montserrat" },
-    { text: "Spas", className: "font-roboto" },
-    { text: "Centros de uñas", className: "font-oswald" },
-    { text: "Centros de cejas", className: "font-playfair" },
-    { text: "Estudios jurídicos", className: "font-lato" },
-    { text: "Empresas de ingeniería", className: "font-montserrat" },
-    { text: "Peluquerías", className: "font-roboto" },
-    { text: "Barberías", className: "font-oswald" },
-    { text: "Clínicas veterinarias", className: "font-playfair" },
-    { text: "Tiendas de ropa", className: "font-lato" },
-    { text: "Tiendas de zapatos", className: "font-montserrat" },
-    { text: "Tiendas de muebles", className: "font-roboto" },
-    { text: "Licoreras", className: "font-oswald" },
-    { text: "Ópticas", className: "font-playfair" },
-    { text: "Tiendas de accesorios", className: "font-lato" },
-    { text: "Negocios e-commerce", className: "font-montserrat" },
-  ];
-
-  const chunkSize = Math.ceil(services.length / 4);
-  const services1 = services.slice(0, chunkSize);
-  const services2 = services.slice(chunkSize, chunkSize * 2);
-  const services3 = services.slice(chunkSize * 2, chunkSize * 3);
-  const services4 = services.slice(chunkSize * 3);
+  }, []);
 
   return (
     <div className="bg-black text-white font-sans">
+      <OptimizedFonts />
       <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-transparent py-4">
           {/* Navigation */}
           <nav className="flex items-center justify-between px-4 lg:px-12 relative">
@@ -325,12 +452,7 @@ export default function LandingPage() {
       
       <HeroSection />
       
-      <ServicesSection 
-        services1={services1}
-        services2={services2}
-        services3={services3}
-        services4={services4}
-      />
+      <ServicesSection {...servicesChunks} />
     </div>
   )
 }
