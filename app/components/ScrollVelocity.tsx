@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useLayoutEffect, useState, RefObject, ReactNode } from "react";
+import { useRef, useLayoutEffect, useState, RefObject, ReactNode, useCallback, useMemo, useEffect } from "react";
 import {
   motion,
   useScroll,
@@ -12,22 +12,76 @@ import {
 } from "framer-motion";
 import "./ScrollVelocity.css";
 
+// Performance monitoring hook
+const usePerformanceMonitor = () => {
+  const [fps, setFps] = useState(60);
+  const frameCount = useRef(0);
+  const lastTime = useRef(performance.now());
+
+  useEffect(() => {
+    const updateFPS = () => {
+      frameCount.current++;
+      const currentTime = performance.now();
+      
+      if (currentTime - lastTime.current >= 1000) {
+        setFps(frameCount.current);
+        frameCount.current = 0;
+        lastTime.current = currentTime;
+      }
+      
+      requestAnimationFrame(updateFPS);
+    };
+    
+    requestAnimationFrame(updateFPS);
+  }, []);
+
+  return fps;
+};
+
+// Optimized width hook with debouncing
 function useElementWidth(ref: { current: HTMLElement | null }) {
   const [width, setWidth] = useState(0);
+  const resizeTimeout = useRef<NodeJS.Timeout>();
 
   useLayoutEffect(() => {
     function updateWidth() {
       if (ref.current) {
-        setWidth(ref.current.offsetWidth);
+        const newWidth = ref.current.offsetWidth;
+        if (newWidth !== width) {
+          setWidth(newWidth);
+        }
       }
     }
+
+    const debouncedUpdate = () => {
+      if (resizeTimeout.current) {
+        clearTimeout(resizeTimeout.current);
+      }
+      resizeTimeout.current = setTimeout(updateWidth, 16); // ~60fps
+    };
+
     updateWidth();
-    window.addEventListener("resize", updateWidth);
-    return () => window.removeEventListener("resize", updateWidth);
-  }, [ref]);
+    window.addEventListener("resize", debouncedUpdate, { passive: true });
+    
+    return () => {
+      window.removeEventListener("resize", debouncedUpdate);
+      if (resizeTimeout.current) {
+        clearTimeout(resizeTimeout.current);
+      }
+    };
+  }, [ref, width]);
 
   return width;
 }
+
+// Optimized velocity calculation with adaptive performance
+const useAdaptiveVelocity = (baseVelocity: number, fps: number) => {
+  return useMemo(() => {
+    // Adjust velocity based on performance
+    const performanceFactor = Math.min(fps / 60, 1.5);
+    return baseVelocity * performanceFactor;
+  }, [baseVelocity, fps]);
+};
 
 interface VelocityTextProps {
   children: ReactNode;
@@ -42,6 +96,8 @@ interface VelocityTextProps {
   scrollerClassName?: string;
   parallaxStyle?: React.CSSProperties;
   scrollerStyle?: React.CSSProperties;
+  enableGPU?: boolean;
+  adaptivePerformance?: boolean;
 }
 
 function VelocityText({
@@ -57,15 +113,23 @@ function VelocityText({
   scrollerClassName = "scroller",
   parallaxStyle,
   scrollerStyle,
+  enableGPU = true,
+  adaptivePerformance = true,
 }: VelocityTextProps) {
+  const fps = usePerformanceMonitor();
+  const adaptiveVelocity = useAdaptiveVelocity(baseVelocity, fps);
+  
   const baseX = useMotionValue(0);
   const scrollOptions = scrollContainerRef ? { container: scrollContainerRef } : {};
   const { scrollY } = useScroll(scrollOptions);
   const scrollVelocity = useVelocity(scrollY);
+  
+  // Optimized spring with adaptive damping
   const smoothVelocity = useSpring(scrollVelocity, {
-    damping: damping ?? 50,
-    stiffness: stiffness ?? 400,
+    damping: adaptivePerformance ? Math.max(damping, fps / 2) : damping,
+    stiffness: adaptivePerformance ? Math.min(stiffness, fps * 8) : stiffness,
   });
+  
   const velocityFactor = useTransform(
     smoothVelocity,
     velocityMapping?.input || [0, 1000],
@@ -75,12 +139,15 @@ function VelocityText({
 
   const copyRef = useRef<HTMLSpanElement>(null);
   const copyWidth = useElementWidth(copyRef);
+  const lastDelta = useRef(0);
+  const frameSkip = useRef(0);
 
-  function wrap(min: number, max: number, v: number) {
+  // Optimized wrap function with caching
+  const wrap = useCallback((min: number, max: number, v: number) => {
     const range = max - min;
     const mod = (((v - min) % range) + range) % range;
     return mod + min;
-  }
+  }, []);
 
   const x = useTransform(baseX, (v) => {
     if (copyWidth === 0) return "0px";
@@ -88,33 +155,79 @@ function VelocityText({
   });
 
   const directionFactor = useRef(1);
+  const lastVelocityFactor = useRef(0);
+  
+  // Optimized animation frame with adaptive frame skipping
   useAnimationFrame((t, delta) => {
-    let moveBy = directionFactor.current * baseVelocity * (delta / 1000);
-
-    if (velocityFactor.get() < 0) {
-      directionFactor.current = -1;
-    } else if (velocityFactor.get() > 0) {
-      directionFactor.current = 1;
+    // Adaptive frame skipping for performance
+    frameSkip.current++;
+    if (adaptivePerformance && fps < 30 && frameSkip.current % 2 === 0) {
+      return;
+    }
+    
+    // Smooth delta calculation
+    const smoothDelta = delta * 0.8 + lastDelta.current * 0.2;
+    lastDelta.current = smoothDelta;
+    
+    let moveBy = directionFactor.current * adaptiveVelocity * (smoothDelta / 1000);
+    
+    // Optimized direction change detection
+    const currentVelocityFactor = velocityFactor.get();
+    if (Math.abs(currentVelocityFactor - lastVelocityFactor.current) > 0.1) {
+      if (currentVelocityFactor < 0) {
+        directionFactor.current = -1;
+      } else if (currentVelocityFactor > 0) {
+        directionFactor.current = 1;
+      }
+      lastVelocityFactor.current = currentVelocityFactor;
     }
 
-    moveBy += directionFactor.current * moveBy * velocityFactor.get();
+    moveBy += directionFactor.current * moveBy * currentVelocityFactor;
     baseX.set(baseX.get() + moveBy);
   });
 
-  const spans = [];
-  for (let i = 0; i < numCopies; i++) {
-    spans.push(
-      <span className={className} key={i} ref={i === 0 ? copyRef : null}>
-        {children}
-      </span>
-    );
-  }
+  // Optimized span generation with memoization
+  const spans = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < numCopies; i++) {
+      result.push(
+        <span 
+          className={className} 
+          key={i} 
+          ref={i === 0 ? copyRef : null}
+          style={enableGPU ? { 
+            willChange: 'transform',
+            transform: 'translateZ(0)' // Force GPU acceleration
+          } : undefined}
+        >
+          {children}
+        </span>
+      );
+    }
+    return result;
+  }, [numCopies, className, children, enableGPU]);
 
   return (
-    <div className={parallaxClassName} style={parallaxStyle}>
+    <div 
+      className={parallaxClassName} 
+      style={{
+        ...parallaxStyle,
+        ...(enableGPU && { 
+          willChange: 'transform',
+          transform: 'translateZ(0)'
+        })
+      }}
+    >
       <motion.div
         className={scrollerClassName}
-        style={{ x, ...scrollerStyle }}
+        style={{ 
+          x, 
+          ...scrollerStyle,
+          ...(enableGPU && { 
+            willChange: 'transform',
+            transform: 'translateZ(0)'
+          })
+        }}
       >
         {spans}
       </motion.div>
@@ -136,6 +249,8 @@ interface ScrollVelocityProps {
     parallaxStyle?: React.CSSProperties;
     scrollerStyle?: React.CSSProperties;
     singleLine?: boolean;
+    enableGPU?: boolean;
+    adaptivePerformance?: boolean;
 }
 
 export const ScrollVelocity = ({
@@ -152,21 +267,41 @@ export const ScrollVelocity = ({
   parallaxStyle,
   scrollerStyle,
   singleLine = false,
+  enableGPU = true,
+  adaptivePerformance = true,
 }: ScrollVelocityProps) => {
-  if (singleLine) {
-    const combinedContent = (
+  
+  // Optimized combined content for single line
+  const combinedContent = useMemo(() => {
+    if (!singleLine) return null;
+    
+    return (
       <>
         {texts.map((item, index) => (
-          <span key={item.text + index} className={item.className}>
+          <span 
+            key={`${item.text}-${index}`} 
+            className={item.className}
+            style={enableGPU ? { 
+              willChange: 'transform',
+              transform: 'translateZ(0)'
+            } : undefined}
+          >
             {item.text}
-            {index < texts.length - 0 && <span className="mx-4 text-gray-500">•</span>}
+            {index < texts.length - 1 && (
+              <span className="mx-4 text-gray-500 opacity-60">•</span>
+            )}
           </span>
         ))}
       </>
     );
+  }, [texts, singleLine, enableGPU]);
 
+  if (singleLine) {
     return (
-      <section>
+      <section style={enableGPU ? { 
+        willChange: 'transform',
+        transform: 'translateZ(0)'
+      } : undefined}>
         <VelocityText
           className={className}
           baseVelocity={velocity}
@@ -179,6 +314,8 @@ export const ScrollVelocity = ({
           scrollerClassName={scrollerClassName}
           parallaxStyle={parallaxStyle}
           scrollerStyle={scrollerStyle}
+          enableGPU={enableGPU}
+          adaptivePerformance={adaptivePerformance}
         >
           {combinedContent}&nbsp;
         </VelocityText>
@@ -187,10 +324,13 @@ export const ScrollVelocity = ({
   }
 
   return (
-    <section>
+    <section style={enableGPU ? { 
+      willChange: 'transform',
+      transform: 'translateZ(0)'
+    } : undefined}>
       {texts.map((item, index) => (
         <VelocityText
-          key={index}
+          key={`${item.text}-${index}`}
           className={item.className || className}
           baseVelocity={index % 2 !== 0 ? -velocity : velocity}
           scrollContainerRef={scrollContainerRef}
@@ -202,6 +342,8 @@ export const ScrollVelocity = ({
           scrollerClassName={scrollerClassName}
           parallaxStyle={parallaxStyle}
           scrollerStyle={scrollerStyle}
+          enableGPU={enableGPU}
+          adaptivePerformance={adaptivePerformance}
         >
           {item.text}&nbsp;
         </VelocityText>

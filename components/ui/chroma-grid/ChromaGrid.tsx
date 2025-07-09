@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { gsap } from "gsap";
 import "./ChromaGrid.css";
 
@@ -26,6 +26,142 @@ export interface ChromaGridProps {
 
 type SetterFn = (v: number | string) => void;
 
+// Optimized image component with GIF handling
+const OptimizedImage: React.FC<{ src: string; alt: string; onLoad?: () => void }> = ({ 
+  src, 
+  alt, 
+  onLoad 
+}) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isGif, setIsGif] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Detect if image is GIF
+  useEffect(() => {
+    if (src.toLowerCase().endsWith('.gif')) {
+      setIsGif(true);
+    }
+  }, [src]);
+
+  // Standard loading for all images
+  const handleImageLoad = useCallback(() => {
+    setIsLoaded(true);
+    onLoad?.();
+  }, [onLoad]);
+
+  return (
+    <div className={`chroma-img-container ${isLoaded ? 'loaded' : 'loading'}`}>
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={handleImageLoad}
+        className={`chroma-img ${isGif ? 'gif-image' : ''} ${isLoaded ? 'loaded' : ''}`}
+        style={{
+          opacity: 1,
+          transition: 'opacity 0.3s ease-in-out'
+        }}
+      />
+    </div>
+  );
+};
+
+// Flip Card Component
+const FlipCard: React.FC<{
+  item: ChromaItem;
+  index: number;
+  onImageLoad: () => void;
+  onCardMove: React.MouseEventHandler<HTMLElement>;
+  onCardClick: () => void;
+}> = ({ item, index, onImageLoad, onCardMove, onCardClick }) => {
+  const [isFlipped, setIsFlipped] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    setIsFlipped(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsFlipped(false);
+  }, []);
+
+  return (
+    <div
+      ref={cardRef}
+      className={`flip-card ${isFlipped ? 'flipped' : ''}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onMouseMove={onCardMove}
+      onClick={onCardClick}
+      style={{
+        '--card-border': item.borderColor || "transparent",
+        '--card-gradient': item.gradient,
+        cursor: item.url ? "pointer" : "default",
+      } as React.CSSProperties}
+    >
+      {/* Front of card */}
+      <div className="flip-card-front">
+        <div className="chroma-img-wrapper">
+          <OptimizedImage 
+            src={item.image} 
+            alt={item.title} 
+            onLoad={onImageLoad}
+          />
+        </div>
+        <footer className="chroma-info">
+          <h3 className="name">{item.title}</h3>
+          <p className="role">{item.subtitle}</p>
+          {item.handle && <span className="handle">{item.handle}</span>}
+          {item.location && <span className="location">{item.location}</span>}
+        </footer>
+      </div>
+
+      {/* Back of card */}
+      <div className="flip-card-back">
+        <div className="back-content" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          height: '100%',
+          padding: '20px',
+          textAlign: 'justify'
+        }}>
+          <div>
+            <div className="back-title" style={{ fontSize: '16px', fontWeight: 'bold', textAlign: 'center', marginBottom: '12px', opacity: 0.95 }}>
+              {item.title === "Branding Estratégico" && "MARCA INOLVIDABLE"}
+              {item.title === "UX/UI Diseño" && "CONVERSIÓN GARANTIZADA"}
+              {item.title === "Software a Medida" && "AUTOMATIZACIÓN TOTAL"}
+              {item.title === "Inteligencia de Datos" && "VENTAJA COMPETITIVA"}
+              {item.title === "Growth Marketing" && "CRECIMIENTO EXPLOSIVO"}
+              {item.title === "Consultoría Digital" && "TRANSFORMACIÓN DIGITAL"}
+            </div>
+            <div className="back-description" style={{ fontSize: '13px', lineHeight: '1.4', opacity: 0.9, marginBottom: '16px' }}>
+              {item.title === "Branding Estratégico" && "Tu marca será recordada. Creamos identidades que generan conexión emocional y posicionamiento de mercado que convierte."}
+              {item.title === "UX/UI Diseño" && "Interfaces que venden. Diseñamos experiencias que enamoran usuarios y multiplican tus conversiones automáticamente."}
+              {item.title === "Software a Medida" && "Software que escala tu negocio. Automatizamos procesos y optimizamos operaciones para maximizar tu rentabilidad."}
+              {item.title === "Inteligencia de Datos" && "Datos que generan dinero. Transformamos información en decisiones que te dan ventaja competitiva inmediata."}
+              {item.title === "Growth Marketing" && "Crecimiento exponencial. Estrategias que escalan tu negocio y multiplican tu ROI con cada campaña."}
+              {item.title === "Consultoría Digital" && "Tu éxito digital garantizado. Identificamos oportunidades y creamos la ruta exacta para tu transformación."}
+            </div>
+          </div>
+          <div style={{ marginTop: 'auto', textAlign: 'center' }}>
+            <span style={{ 
+              textDecoration: 'underline', 
+              fontSize: '12px', 
+              cursor: 'pointer',
+              opacity: 0.8,
+              transition: 'opacity 0.2s ease'
+            }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}>
+              saber más
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const ChromaGrid: React.FC<ChromaGridProps> = ({
   items,
   className = "",
@@ -41,6 +177,7 @@ export const ChromaGrid: React.FC<ChromaGridProps> = ({
   const setX = useRef<SetterFn | null>(null);
   const setY = useRef<SetterFn | null>(null);
   const pos = useRef({ x: 0, y: 0 });
+  const [isGridReady, setIsGridReady] = useState(true);
 
   const demo: ChromaItem[] = [
     {
@@ -98,11 +235,23 @@ export const ChromaGrid: React.FC<ChromaGridProps> = ({
       url: "https://aws.amazon.com/",
     },
   ];
-  const data = items?.length ? items : demo;
+  
+  const data = useMemo(() => items?.length ? items : demo, [items]);
+
+  // Simple image loading - no tracking needed
+  const handleImageLoad = useCallback(() => {
+    // Do nothing - images load naturally
+  }, []);
+
+  // Grid is always ready
+  useEffect(() => {
+    setIsGridReady(true);
+  }, []);
 
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
+    
     setX.current = gsap.quickSetter(el, "--x", "px") as SetterFn;
     setY.current = gsap.quickSetter(el, "--y", "px") as SetterFn;
     const { width, height } = el.getBoundingClientRect();
@@ -111,7 +260,9 @@ export const ChromaGrid: React.FC<ChromaGridProps> = ({
     setY.current(pos.current.y);
   }, []);
 
-  const moveTo = (x: number, y: number) => {
+  const moveTo = useCallback((x: number, y: number) => {
+    if (!isGridReady) return; // Only allow interactions when grid is ready
+    
     gsap.to(pos.current, {
       x,
       y,
@@ -123,41 +274,45 @@ export const ChromaGrid: React.FC<ChromaGridProps> = ({
       },
       overwrite: true,
     });
-  };
+  }, [damping, ease, isGridReady]);
 
-  const handleMove = (e: React.PointerEvent) => {
+  const handleMove = useCallback((e: React.PointerEvent) => {
+    if (!isGridReady) return;
+    
     const r = rootRef.current!.getBoundingClientRect();
     moveTo(e.clientX - r.left, e.clientY - r.top);
     gsap.to(fadeRef.current, { opacity: 0, duration: 0.25, overwrite: true });
-  };
+  }, [moveTo, isGridReady]);
 
-  const handleLeave = () => {
+  const handleLeave = useCallback(() => {
     gsap.to(fadeRef.current, {
       opacity: 1,
       duration: fadeOut,
       overwrite: true,
     });
-  };
+  }, [fadeOut]);
 
-  const handleCardClick = (url?: string) => {
+  const handleCardClick = useCallback((url?: string) => {
     if (url) {
       window.open(url, "_blank", "noopener,noreferrer");
     }
-  };
+  }, []);
 
-  const handleCardMove: React.MouseEventHandler<HTMLElement> = (e) => {
+  const handleCardMove: React.MouseEventHandler<HTMLElement> = useCallback((e) => {
+    if (!isGridReady) return;
+    
     const card = e.currentTarget as HTMLElement;
     const rect = card.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     card.style.setProperty("--mouse-x", `${x}px`);
     card.style.setProperty("--mouse-y", `${y}px`);
-  };
+  }, [isGridReady]);
 
   return (
     <div
       ref={rootRef}
-      className={`chroma-grid ${className}`}
+      className={`chroma-grid ${className} ${isGridReady ? 'ready' : 'loading'}`}
       style={
         {
           "--r": `${radius}px`,
@@ -168,33 +323,20 @@ export const ChromaGrid: React.FC<ChromaGridProps> = ({
       onPointerMove={handleMove}
       onPointerLeave={handleLeave}
     >
-      {data.map((c, i) => (
-        <article
-          key={i}
-          className="chroma-card"
-          onMouseMove={handleCardMove}
-          onClick={() => handleCardClick(c.url)}
-          style={
-            {
-              "--card-border": c.borderColor || "transparent",
-              "--card-gradient": c.gradient,
-              cursor: c.url ? "pointer" : "default",
-            } as React.CSSProperties
-          }
-        >
-          <div className="chroma-img-wrapper">
-            <img src={c.image} alt={c.title} loading="lazy" />
-          </div>
-          <footer className="chroma-info">
-            <h3 className="name">{c.title}</h3>
-            <p className="role">{c.subtitle}</p>
-            {c.handle && <span className="handle">{c.handle}</span>}
-            {c.location && <span className="location">{c.location}</span>}
-          </footer>
-        </article>
+      {data.map((item, index) => (
+        <FlipCard
+          key={index}
+          item={item}
+          index={index}
+          onImageLoad={handleImageLoad}
+          onCardMove={handleCardMove}
+          onCardClick={() => handleCardClick(item.url)}
+        />
       ))}
       <div className="chroma-overlay" />
       <div ref={fadeRef} className="chroma-fade" />
+      
+      {/* No loading indicator - simple and clean */}
     </div>
   );
 };
