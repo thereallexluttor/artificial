@@ -1,12 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
-
-const Spline = dynamic(() => import('@splinetool/react-spline/next'), {
-  ssr: false,
-  loading: () => null
-});
+import Spline from '@splinetool/react-spline/next';
 
 export default function SplineScene() {
   const [error, setError] = useState(false);
